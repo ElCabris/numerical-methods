@@ -159,3 +159,30 @@ def newton_method(f_expr, x, x0, tol=1e-6, max_iter=100):
         x_n = x_next
 
     raise ValueError("No se encontró la raíz en {} iteraciones".format(max_iter))
+
+def secante(f, x0, x1, tol=1e-10, max_iter=100):
+    """
+    Encuentra una raíz de f(x)=0 usando el método de la secante
+    :param f: función a resolver
+    :param x0: primera aproximación inicial
+    :param x1: segunda aproximación inicial
+    :param tol: tolerancia
+    :param max_iter: máximo de iteraciones
+    :return: aproximación de la raíz, número de iteraciones
+    """
+    for i in range(max_iter):
+        f0, f1 = f(x0), f(x1)
+        if f1 - f0 == 0:
+            raise ValueError("División por cero en iteración {}".format(i))
+
+        # Fórmula de la secante
+        x2 = x1 - f1 * (x1 - x0) / (f1 - f0)
+
+        # Revisar convergencia
+        if abs(x2 - x1) < tol:
+            return x2, i+1
+
+        # Avanzar
+        x0, x1 = x1, x2
+
+    raise RuntimeError("El método no convergió en {} iteraciones".format(max_iter))
