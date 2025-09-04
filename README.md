@@ -1,0 +1,1 @@
+Repositorio creado con el fin de almacenar y divulgar los conocimientos obtenidos durante el curso de Análisis numérico de la Universidad de Medellín, dictado en el periodo 2025-2, dictado por la profesora [Leidy Yoana Medina Torres](https://scholar.google.com/citations?user=xIZwGQEAAAAJ&hl=es&oi=ao)
