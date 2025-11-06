@@ -1,8 +1,11 @@
 import math
+import matplotlib.pyplot as plt
 import sympy as sp
-from typing import Union, Tuple, Callable
+from typing import Union, Tuple, Callable, Sequence
+import numpy as np
 
 Number = Union[int, float, sp.Expr]
+
 
 def absolute_error(real: int | float, aprox: int | float) -> int | float:
     return abs(real - aprox)
@@ -10,6 +13,7 @@ def absolute_error(real: int | float, aprox: int | float) -> int | float:
 
 def relative_error(real: int | float, aprox: int | float) -> float:
     return absolute_error(real, aprox) / abs(real)
+
 
 def percentage_error(real: int | float, aprox: int | float) -> float:
     return relative_error(real, aprox) * 100
@@ -48,7 +52,10 @@ def taylor_polynomial(
 
     return term + taylor_polynomial(f_expr, var, a, n, k + 1)
 
-def taylor_remainder_bound(f_expr: sp.Expr, var: sp.Symbol, a: Number, n: int, x: Number) -> Tuple[sp.Expr, float]:
+
+def taylor_remainder_bound(
+    f_expr: sp.Expr, var: sp.Symbol, a: Number, n: int, x: Number
+) -> Tuple[sp.Expr, float]:
     """
     f_expr: Symbolic function
     var: sp.Symbol
@@ -69,13 +76,15 @@ def taylor_remainder_bound(f_expr: sp.Expr, var: sp.Symbol, a: Number, n: int, x
     x_num = float(sp.N(x))
     lo, hi = (a_num, x_num) if a_num <= x_num else (x_num, a_num)
     if lo == hi:
-        return sp.diff(f_expr, var, n+1), 0.0
+        return sp.diff(f_expr, var, n + 1), 0.0
 
-    deriv_n1_expr = sp.simplify(sp.diff(f_expr, var, n+1))
+    deriv_n1_expr = sp.simplify(sp.diff(f_expr, var, n + 1))
 
     crit_points = []
     try:
-        crit_set = sp.solveset(sp.Eq(sp.diff(deriv_n1_expr, var), 0), var, domain=sp.Interval(lo, hi))
+        crit_set = sp.solveset(
+            sp.Eq(sp.diff(deriv_n1_expr, var), 0), var, domain=sp.Interval(lo, hi)
+        )
 
         if isinstance(crit_set, sp.FiniteSet):
             for s in crit_set:
@@ -99,8 +108,9 @@ def taylor_remainder_bound(f_expr: sp.Expr, var: sp.Symbol, a: Number, n: int, x
             continue
 
     M = max_val
-    bound = M / math.factorial(n + 1) * abs(x_num - a_num) ** (n+1)
+    bound = M / math.factorial(n + 1) * abs(x_num - a_num) ** (n + 1)
     return deriv_n1_expr, bound
+
 
 def bisection(f: Callable[[float], float], a: float, b: float, tol: float) -> float:
     if f(a) * f(b) > 0:
@@ -115,8 +125,8 @@ def bisection(f: Callable[[float], float], a: float, b: float, tol: float) -> fl
     if f(a) * fc < 0:
         return bisection(f, a, c, tol)
     else:
-        return bisection(f,c, b, tol)
-    
+        return bisection(f, c, b, tol)
+
 
 def bisection_iters(a: float, b: float, eps: float) -> int:
     if eps <= 0:
@@ -124,11 +134,13 @@ def bisection_iters(a: float, b: float, eps: float) -> int:
     L = abs(b - a)
     if eps >= L:
         return 0
-    return math.ceil(math.log(L/eps, 2))
+    return math.ceil(math.log(L / eps, 2))
 
-def false_position(f: Callable[[float], float], a: float, b: float, tol: float) -> float:
-    """
-    """
+
+def false_position(
+    f: Callable[[float], float], a: float, b: float, tol: float
+) -> float:
+    """ """
     fa, fb = f(a), f(b)
     if fa * fb > 0:
         raise ValueError("f(a) y f(b) deben tener signos opuestos")
@@ -144,6 +156,7 @@ def false_position(f: Callable[[float], float], a: float, b: float, tol: float) 
     else:
         return false_position(f, c, b, tol)
 
+
 def newton_method(f_expr, x, x0, tol=1e-6, max_iter=100):
     df_expr = sp.diff(f_expr, x)
     x_n = x0
@@ -158,4 +171,515 @@ def newton_method(f_expr, x, x0, tol=1e-6, max_iter=100):
             return x_next
         x_n = x_next
 
-    raise ValueError("No se encontró la raíz en {} iteraciones".format(max_iter))
+    raise ValueError(f"No se encontró la raíz en {max_iter} iteraciones")
+
+
+def lagrange_interpolation(xs, ys):
+    if len(xs) != len(ys):
+        raise ValueError()
+
+    x = sp.symbols("x")
+    n = len(xs)
+    P = 0
+    for i in range(n):
+        # Construir el L_i(x)
+        Li = 1
+        for j in range(n):
+            if i != j:
+                Li *= (x - xs[j]) / (xs[i] - xs[j])
+        P += ys[i] * Li
+
+    return sp.expand(P)
+
+
+def recta_minimos_cuadrados(x_vals, y_vals):
+    """
+    Calcula la recta de mínimos cuadrados para un conjunto de puntos (x, y).
+    Retorna la expresión simbólica y la pendiente/intercepto.
+    """
+    # Variable simbólica
+    x = sp.Symbol("x")
+
+    # Número de puntos
+    n = len(x_vals)
+
+    # Convertir a Sympy para operaciones exactas
+    X = list(map(sp.Rational, x_vals))
+    Y = list(map(sp.Rational, y_vals))
+
+    # Calcular sumatorias
+    sum_x = sum(X)
+    sum_y = sum(Y)
+    sum_x2 = sum(xi**2 for xi in X)
+    sum_xy = sum(xi * yi for xi, yi in zip(X, Y))
+
+    # Fórmulas de mínimos cuadrados
+    a = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x**2)
+    b = (sum_y - a * sum_x) / n
+
+    # Ecuación de la recta
+    recta = a * x + b
+
+    return recta.simplify(), sp.simplify(a), sp.simplify(b)
+
+
+class SLE:
+
+    @classmethod
+    def build_system(
+        cls, n: int, T_bottom: float, T_left: float, T_right: float, T_top: float
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Construye el sistema de ecuaciones lineales (A, b) para una placa cuadrada discretizada.
+
+
+        Parámetros:
+        ---
+        n (int): Números de puntso interiores por lado (la malla será n x n)
+        t_bottom, t_left, t_right, t_top (float):
+            Temperaturas fijas en cada borde
+        """
+        N = n * n
+        A = np.zeros((N, N), dtype=float)
+        b = np.zeros(N, dtype=float)
+
+        def k(i: int, j: int) -> int:
+            """Indice lineal (0-based) para columna i y fila j (fila 0 = inferior)."""
+            return j * n + i
+
+        for j in range(n):
+            for i in range(n):
+                idx = k(i, j)
+                A[idx, idx] = 4.0
+
+                # vecino izquierdo
+                if i - 1 >= 0:
+                    A[idx, k(i - 1, j)] = -1.0
+                else:
+                    b[idx] += T_left
+
+                # vecino derecho
+                if i + 1 < n:
+                    A[idx, k(i + 1, j)] = -1.0
+                else:
+                    b[idx] += T_right
+
+                # vecino inferior
+                if j - 1 >= 0:
+                    A[idx, k(i, j - 1)] = -1.0
+                else:
+                    b[idx] += T_bottom
+
+                # vecino superior
+                if j + 1 < n:
+                    A[idx, k(i, j + 1)] = -1.0
+                else:
+                    b[idx] += T_top
+
+        return A, b
+
+    @classmethod
+    def solve_exact(
+        cls, A: np.ndarray, b: np.ndarray, n: int = 5
+    ) -> tuple[np.ndarray, np.ndarray]:
+        pass
+
+    @classmethod
+    def spectral_radius(
+        cls, B: np.ndarray, tol: float = 1e-8, maxit: int = 10000
+    ) -> float:
+        """
+        Calcula el radio espoectal de una matriz (el mayor valor absoluto de sus autovalores) usando el método de potencias iterativo.
+
+        Parámetros:
+        - B: matrtiz de ieteración.
+
+        Retorns:
+        - ρ (float): radio espectral de la matriz
+        """
+        n = B.shape[0]
+        x = np.ones(n)
+
+        for _ in range(maxit):
+            x_new = np.dot(B, x)
+            norm = np.max(np.abs(x_new))
+            x_new = x_new / norm
+
+            if np.max(np.abs(x_new - x)) < tol:
+                return norm
+            x = x_new
+        return norm
+
+    @classmethod
+    def jacobi(
+        cls,
+        A: np.ndarray,
+        b: np.ndarray,
+        x0: np.ndarray | None = None,
+        tol: float = 1e-6,
+        maxit=10000,
+    ) -> tuple[np.ndarray, int]:
+        """
+        Implementa el método iterativo de Jacobi para resolver Ax = b.
+
+        Parámetros:
+        - A: matriz de coeficientes.
+        - b: vector del lado derecho.
+        - x0: vector inicial (opcional, por defecto ceros).
+        - tol: tolerancia para el criterio de convergencia.
+        - maxit: número máximo de iteraciones.
+
+
+        Retorna:
+        - x: vector solución aproximada.
+        - k: número de iteraciones realizadas.
+        """
+        n = len(b)
+        if x0 is None:
+            x0 = np.zeros(n)
+        x = np.copy(x0)
+
+        for k in range(maxit):
+            x_new = np.zeros_like(x)
+            for i in range(n):
+                s = 0.0
+                for j in range(n):
+                    if j != i:
+                        s += A[i, j] * x[j]
+                x_new[i] = (b[i] - s) / A[i, i]
+
+            if np.max(np.abs(x_new - x)) < tol:
+                return x_new, k + 1
+            x = x_new
+
+        return x, maxit
+
+    @classmethod
+    def gauss_seidel(
+        cls,
+        A: np.ndarray,
+        b: np.ndarray,
+        x0: np.ndarray | None = None,
+        tol: float = 1e-8,
+        maxit: int = 10000,
+    ) -> tuple[np.ndarray, int]:
+        """
+        Implementa el método iterativo de Gauss-Seidel para resolver Ax = b.
+
+
+        Parámetros:
+        - A: matriz de coeficientes.
+        - b: vector del lado derecho.
+        - x0: vector inicial (opcional, por defecto ceros).
+        - tol: tolerancia para el criterio de convergencia.
+        - maxit: número máximo de iteraciones.
+
+
+        Retorna:
+        - x: vector solución aproximada.
+        - k: número de iteraciones realizadas.
+        """
+        n = len(b)
+        if x0 is None:
+            x0 = np.zeros(n)
+        x = np.copy(x0)
+
+        for k in range(maxit):
+            x_old = np.copy(x)
+            for i in range(n):
+                s1 = sum(A[i, j] * x[j] for j in range(i))
+                s2 = sum(A[i, j] * x_old[j] for j in range(i + 1, n))
+                x[i] = (b[i] - s1 - s2) / A[i, i]
+
+            if np.max(np.abs(x - x_old)) < tol:
+                return x, k + 1
+
+        return x, maxit
+
+    @classmethod
+    def plot_temperature_distribution(cls, sol_exact: np.ndarray) -> None:
+        """
+        Genera una visualización gráfica de la distribución estacionaria de temperaturas.
+
+
+        Parámetros:
+        - sol_exact: matriz (n × n) con los valores de temperatura.
+        """
+        plt.imshow(sol_exact, origin="lower", cmap="coolwarm", interpolation="nearest")
+        plt.colorbar(label="Temperatura")
+        plt.title("Distribución estacionaria de temperaturas")
+        plt.show()
+
+
+
+
+
+def find_equilibria(A, beta=0.1, alpha=0.5, gamma=0.0111, psi=0.009, g = None):
+    """
+    Encuentra todos los puntos de equilibrio para un valor dado de A.
+    
+    Parámetros:
+    - A: factor de crecimiento ambiental
+    
+    Retorna:
+    - Lista de puntos de equilibrio (y donde g(y) = 0)
+    """
+    equilibria = []
+    
+    # y = 0 siempre es un equilibrio trivial
+    if abs(g(0, A, beta, alpha, gamma, psi)) < 1e-10:
+        equilibria.append(0.0)
+    
+    # Buscar equilibrios no triviales en diferentes intervalos
+    # Probamos en rangos: [0.1, 20], [20, 50], [50, 100], [100, 200]
+    search_ranges = [(0.1, 20), (20, 50), (50, 100), (100, 200)]
+    
+    for y_min, y_max in search_ranges:
+        try:
+            # Verificar si hay cambio de signo en el intervalo
+            if g(y_min, A, beta, alpha, gamma, psi) * g(y_max, A, beta, alpha, gamma, psi) < 0:
+                root = brentq(lambda y: g(y, A, beta, alpha, gamma, psi), y_min, y_max)
+                # Evitar duplicados
+                if not any(abs(root - eq) < 0.01 for eq in equilibria):
+                    equilibria.append(root)
+        except:
+            pass
+    
+    # También usar fsolve con múltiples puntos iniciales
+    initial_guesses = [1, 5, 10, 15, 20, 30, 50, 80, 100]
+    for y0 in initial_guesses:
+        try:
+            root = fsolve(lambda y: g(y, A, beta, alpha, gamma, psi), y0)[0]
+            if root > 0 and abs(g(root, A, beta, alpha, gamma, psi)) < 1e-8:
+                # Verificar que no sea duplicado
+                if not any(abs(root - eq) < 0.01 for eq in equilibria):
+                    equilibria.append(root)
+        except:
+            pass
+    
+    return sorted(equilibria)
+
+
+def runge_kutta_4(f, y0, t0, tf, h, A):
+    """
+    Método de Runge-Kutta de orden 4 para resolver dy/dt = f(y, A).
+    
+    Parámetros:
+    - f: función que define dy/dt
+    - y0: condición inicial
+    - t0: tiempo inicial
+    - tf: tiempo final
+    - h: tamaño de paso
+    - A: parámetro A del modelo
+    
+    Retorna:
+    - t: array de tiempos
+    - y: array de valores de y(t)
+    """
+    n_steps = int((tf - t0) / h) + 1
+    t = np.linspace(t0, tf, n_steps)
+    y = np.zeros(n_steps)
+    y[0] = y0
+    
+    for i in range(n_steps - 1):
+        k1 = h * f(y[i], A)
+        k2 = h * f(y[i] + k1/2, A)
+        k3 = h * f(y[i] + k2/2, A)
+        k4 = h * f(y[i] + k3, A)
+        
+        y[i + 1] = y[i] + (k1 + 2*k2 + 2*k3 + k4) / 6
+    
+    return t, y
+
+
+
+def least_squares(x, y):
+    """
+    Calcula los coeficientes del modelo lineal y = a*x + b por mínimos cuadrados.
+    Retorna: (a, b)
+    """
+    n = len(x)
+    if n != len(y):
+        raise ValueError("x y y deben tener la misma longitud.")
+
+    # Cálculo de coeficientes
+    x_mean = np.mean(x)
+    y_mean = np.mean(y)
+    a = np.sum((x - x_mean) * (y - y_mean)) / np.sum((x - x_mean)**2)
+    b = y_mean - a * x_mean
+    return a, b
+
+
+def r_squared(y_real, y_pred):
+    """
+    Calcula el coeficiente de determinación R^2.
+    """
+    ss_res = np.sum((y_real - y_pred)**2)
+    ss_tot = np.sum((y_real - np.mean(y_real))**2)
+    return 1 - (ss_res / ss_tot)
+
+
+def best_model(x, y):
+    """
+    Evalúa distintas transformaciones de x y y y determina cuál modelo tiene
+    el mejor ajuste lineal (mayor R^2).
+    """
+    if len(x) != len(y):
+        raise ValueError("x y y deben tener la misma longitud.")
+    
+    x = np.array(x, dtype=float)
+    y = np.array(y, dtype=float)
+    
+    models = {
+        "x vs y": (x, y),
+        "x vs sqrt(y)": (x, np.sqrt(y)),
+        "sqrt(x) vs y": (np.sqrt(x), y),
+        "sqrt(x) vs sqrt(y)": (np.sqrt(x), np.sqrt(y)),
+        "log(x) vs y": (np.log(x), y),
+        "x vs log(y)": (x, np.log(y)),
+        "log(x) vs log(y)": (np.log(x), np.log(y)),
+        "x vs 1/y": (x, 1/y),
+        "1/x vs y": (1/x, y),
+        "1/x vs 1/y": (1/x, 1/y)
+    }
+
+    results = []
+
+    for name, (X, Y) in models.items():
+        # Validar que los valores sean finitos
+        if not (np.isfinite(X).all() and np.isfinite(Y).all()):
+            continue
+        
+        try:
+            a, b = least_squares(X, Y)
+            y_pred = a * X + b
+            r2 = r_squared(Y, y_pred)
+            results.append((name, r2, a, b))
+        except Exception:
+            # Saltar combinaciones que fallen (log de negativos, división por cero, etc.)
+            continue
+    
+    # Ordenar por mejor R²
+    results.sort(key=lambda x: x[1], reverse=True)
+    best = results[0]
+
+    print("Resultados de los modelos evaluados:")
+    for name, r2, a, b in results:
+        print(f"{name:<20} → R² = {r2:.5f}")
+
+    print("\n🏆 Mejor modelo encontrado:")
+    print(f"Modelo: {best[0]}")
+    print(f"R² = {best[1]:.5f}")
+    print(f"Ecuación: y = {best[2]:.5f}x + {best[3]:.5f}")
+
+    return best
+
+
+
+def euler_sistema(f, x0, y0, t0, tf, h):
+    """
+    Método de Euler para resolver un sistema de 2 EDOs.
+    
+    Parámetros:
+    -----------
+    f : function
+        Función que define el sistema: f(t, x, y) -> (dx/dt, dy/dt)
+    x0, y0 : float
+        Condiciones iniciales
+    t0, tf : float
+        Tiempo inicial y final
+    h : float
+        Paso de integración
+    
+    Retorna:
+    --------
+    t, x, y : ndarrays
+        Arrays con los valores de tiempo y las soluciones
+    """
+    # Número de pasos
+    n_steps = int((tf - t0) / h) + 1
+    
+    # Inicializar arrays
+    t = np.linspace(t0, tf, n_steps)
+    x = np.zeros(n_steps)
+    y = np.zeros(n_steps)
+    
+    # Condiciones iniciales
+    x[0] = x0
+    y[0] = y0
+    
+    # Método de Euler
+    for i in range(n_steps - 1):
+        dx_dt, dy_dt = f(t[i], x[i], y[i])
+        
+        x[i + 1] = x[i] + h * dx_dt
+        y[i + 1] = y[i] + h * dy_dt
+    
+    return t, x, y
+
+def interpolacion_polinomial_simple(
+    x: Sequence[float],
+    y: Sequence[float],
+    mostrar_grafico: bool = True
+) -> np.ndarray:
+    """
+    Calcula el polinomio de interpolación que pasa exactamente por los puntos dados (x, y),
+    resolviendo el sistema lineal asociado a la matriz de Vandermonde.
+
+    Parámetros
+    ----------
+    x : Sequence[float]
+        Secuencia con las coordenadas x de los puntos conocidos.
+    y : Sequence[float]
+        Secuencia con las coordenadas y correspondientes a cada x.
+    mostrar_grafico : bool, opcional
+        Si es True (por defecto), muestra el gráfico del polinomio interpolante y los puntos.
+
+    Retorna
+    -------
+    np.ndarray
+        Arreglo con los coeficientes del polinomio interpolante, ordenados de mayor a menor grado.
+        Es decir, si retorna [a, b, c], el polinomio es: P(x) = a*x^2 + b*x + c
+
+    Ejemplo
+    -------
+    >>> x = [1, 2, 3]
+    >>> y = [2, 3, 5]
+    >>> coef = interpolacion_polinomial_simple(x, y)
+    Coeficientes del polinomio: [ 0.5 -0.5  2. ]
+    Ecuación del polinomio: P(x) = 0.5*x^2 + -0.5*x + 2.0
+    """
+
+    # Convertir a arreglos numpy
+    x = np.array(x, dtype=float)
+    y = np.array(y, dtype=float)
+
+    # Verificar que tengan la misma longitud
+    if len(x) != len(y):
+        raise ValueError("Las listas x e y deben tener la misma longitud.")
+
+    # Construir la matriz de Vandermonde
+    A = np.vander(x, increasing=False)
+
+    # Resolver el sistema A * coef = y
+    coef = np.linalg.solve(A, y)
+
+    # Mostrar resultados en consola
+    print("Coeficientes del polinomio:", coef)
+    ecuacion = " + ".join(f"{c:.3g}*x^{len(coef)-i-1}" for i, c in enumerate(coef))
+    print(f"Ecuación del polinomio: P(x) = {ecuacion}")
+
+    # Graficar si se solicita
+    if mostrar_grafico:
+        x_interp = np.linspace(min(x), max(x), 200)
+        y_interp = np.polyval(coef, x_interp)
+        plt.scatter(x, y, color='red', label='Puntos conocidos')
+        plt.plot(x_interp, y_interp, color='blue', label='Polinomio interpolante')
+        plt.title("Interpolación Polinomial Simple")
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+    return coef
