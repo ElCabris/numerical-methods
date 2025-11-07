@@ -354,6 +354,54 @@ class SLE:
 
         return x, maxit
 
+    @staticmethod
+    def spectral_radius_jacobi(A: np.ndarray) -> float:
+        """
+        Calcula el radio espectral del método de Jacobi.
+
+        ρ_J = max(|λ_i(D⁻¹(L + U))|)
+
+        Parámetros
+        ----------
+        A : np.ndarray
+            Matriz del sistema.
+
+        Retorna
+        -------
+        float
+            Radio espectral del método de Jacobi.
+        """
+        D = np.diag(np.diag(A))
+        L_U = A - D
+        B = np.linalg.inv(D) @ L_U
+        eigvals = np.linalg.eigvals(B)
+        return max(abs(eigvals))
+
+    @staticmethod
+    def spectral_radius_gauss_seidel(A: np.ndarray) -> float:
+        """
+        Calcula el radio espectral del método de Gauss-Seidel.
+
+        ρ_GS = max(|λ_i((D + L)⁻¹ U)|)
+
+        Parámetros
+        ----------
+        A : np.ndarray
+            Matriz del sistema.
+
+        Retorna
+        -------
+        float
+            Radio espectral del método de Gauss-Seidel.
+        """
+        D = np.diag(np.diag(A))
+        L = np.tril(A, k=-1)
+        U = np.triu(A, k=1)
+        B = np.linalg.inv(D + L) @ U
+        eigvals = np.linalg.eigvals(B)
+        return max(abs(eigvals))
+
+
     @classmethod
     def gauss_seidel(
         cls,
