@@ -1,7 +1,7 @@
 import math
 import matplotlib.pyplot as plt
 import sympy as sp
-from typing import Union, Tuple, Callable, Sequence
+from typing import Union, Tuple, Callable
 import numpy as np
 
 Number = Union[int, float, sp.Expr]
@@ -54,38 +54,96 @@ def taylor_polynomial(
 
 
 def taylor_remainder_bound(
-    f_expr: sp.Expr, var: sp.Symbol, a: Number, n: int, x: Number
+    f_expr: sp.Expr,
+    var: sp.Symbol,
+    a: Number,
+    n: int,
+    x: Number
 ) -> Tuple[sp.Expr, float]:
     """
-    f_expr: Symbolic function
-    var: sp.Symbol
-    a: Expansion point
-    n: order of the polynomial
-    x: point where the height is evaluated
+    Compute the (n+1)-th derivative of a symbolic function and an upper bound
+    for the Lagrange remainder of the Taylor polynomial of order `n`
+    expanded at the point `a`, evaluated at the point `x`.
 
-    Return
-    ---
-    deriv_n1_expr: The (n+1)th symbolic derivative.
-    bound: Numerical bound of |R_n(x)|.
+    This function implements the classical Lagrange remainder estimation:
+
+        |R_n(x)| ≤ M * |x - a|^(n+1) / (n+1)!
+
+    where:
+        M = max_{c ∈ [a, x]} |f^(n+1)(c)|.
+
+    To approximate M, the function:
+        1. Computes f^(n+1)(x) symbolically.
+        2. Searches for critical points of the derivative of f^(n+1).
+        3. Evaluates |f^(n+1)| at the interval endpoints and at all critical points.
+        4. Takes the maximum value found.
+
+    Parameters
+    ----------
+    f_expr : sympy.Expr
+        Symbolic expression representing the function f(x).
+    var : sympy.Symbol
+        The variable with respect to which derivatives are taken.
+    a : Number
+        The expansion point for the Taylor polynomial.
+    n : int
+        Order of the Taylor polynomial.
+    x : Number
+        The point at which the remainder bound is evaluated.
+
+    Returns
+    -------
+    deriv_n1_expr : sympy.Expr
+        Symbolic expression of the (n+1)-th derivative of f(x).
+    bound : float
+        Numerical upper bound for |R_n(x)|, the magnitude of the Lagrange remainder.
+
+    Raises
+    ------
+    ValueError
+        If `n < 0`.
+
+    Notes
+    -----
+    - If x = a, the remainder is zero and the function returns (f^(n+1), 0).
+    - If SymPy cannot solve for critical points, the function gracefully ignores them
+      and uses only interval endpoints.
+    - The value M is computed numerically using float evaluations of the derivative.
+
+    Examples
+    --------
+    >>> import sympy as sp
+    >>> x = sp.Symbol('x')
+    >>> f = sp.exp(x)
+    >>> deriv, bound = taylor_remainder_bound(f, x, a=0, n=3, x=1)
+    >>> deriv
+    exp(x)
+    >>> bound  # should be close to e / 24
+    0.113...
     """
 
     if n < 0:
-        raise ValueError("")
+        raise ValueError("Order n must be non-negative.")
 
     a_num = float(sp.N(a))
     x_num = float(sp.N(x))
     lo, hi = (a_num, x_num) if a_num <= x_num else (x_num, a_num)
+
+    # If x = a, remainder is zero.
     if lo == hi:
         return sp.diff(f_expr, var, n + 1), 0.0
 
+    # Compute (n+1)-th derivative.
     deriv_n1_expr = sp.simplify(sp.diff(f_expr, var, n + 1))
 
+    # Attempt to find critical points of the (n+1)-th derivative.
     crit_points = []
     try:
         crit_set = sp.solveset(
-            sp.Eq(sp.diff(deriv_n1_expr, var), 0), var, domain=sp.Interval(lo, hi)
+            sp.Eq(sp.diff(deriv_n1_expr, var), 0),
+            var,
+            domain=sp.Interval(lo, hi)
         )
-
         if isinstance(crit_set, sp.FiniteSet):
             for s in crit_set:
                 try:
@@ -97,6 +155,7 @@ def taylor_remainder_bound(
     except Exception:
         pass
 
+    # Evaluate absolute derivative at endpoints and critical points.
     candidates = [lo, hi] + crit_points
     max_val = 0.0
     for c in candidates:
@@ -109,6 +168,7 @@ def taylor_remainder_bound(
 
     M = max_val
     bound = M / math.factorial(n + 1) * abs(x_num - a_num) ** (n + 1)
+
     return deriv_n1_expr, bound
 
 
@@ -354,6 +414,54 @@ class SLE:
 
         return x, maxit
 
+    @staticmethod
+    def spectral_radius_jacobi(A: np.ndarray) -> float:
+        """
+        Calcula el radio espectral del método de Jacobi.
+
+        ρ_J = max(|λ_i(D⁻¹(L + U))|)
+
+        Parámetros
+        ----------
+        A : np.ndarray
+            Matriz del sistema.
+
+        Retorna
+        -------
+        float
+            Radio espectral del método de Jacobi.
+        """
+        D = np.diag(np.diag(A))
+        L_U = A - D
+        B = np.linalg.inv(D) @ L_U
+        eigvals = np.linalg.eigvals(B)
+        return max(abs(eigvals))
+
+    @staticmethod
+    def spectral_radius_gauss_seidel(A: np.ndarray) -> float:
+        """
+        Calcula el radio espectral del método de Gauss-Seidel.
+
+        ρ_GS = max(|λ_i((D + L)⁻¹ U)|)
+
+        Parámetros
+        ----------
+        A : np.ndarray
+            Matriz del sistema.
+
+        Retorna
+        -------
+        float
+            Radio espectral del método de Gauss-Seidel.
+        """
+        D = np.diag(np.diag(A))
+        L = np.tril(A, k=-1)
+        U = np.triu(A, k=1)
+        B = np.linalg.inv(D + L) @ U
+        eigvals = np.linalg.eigvals(B)
+        return max(abs(eigvals))
+
+
     @classmethod
     def gauss_seidel(
         cls,
@@ -575,111 +683,50 @@ def best_model(x, y):
     return best
 
 
-
-def euler_sistema(f, x0, y0, t0, tf, h):
+def euler_sistema(f, y0: float, v0: float, t0: float, tf: float, h: float):
     """
-    Método de Euler para resolver un sistema de 2 EDOs.
+    Método de Euler explícito para resolver un sistema de 2 EDOs de la forma:
     
-    Parámetros:
-    -----------
+        y' = f1(t, y, v)
+        v' = f2(t, y, v)
+
+    Parámetros
+    ----------
     f : function
-        Función que define el sistema: f(t, x, y) -> (dx/dt, dy/dt)
-    x0, y0 : float
-        Condiciones iniciales
+        Función que define el sistema: f(t, y, v) -> (dy/dt, dv/dt)
+    y0 : float
+        Condición inicial para la posición y(0)
+    v0 : float
+        Condición inicial para la velocidad v(0)
     t0, tf : float
         Tiempo inicial y final
     h : float
         Paso de integración
-    
-    Retorna:
-    --------
-    t, x, y : ndarrays
-        Arrays con los valores de tiempo y las soluciones
-    """
-    # Número de pasos
-    n_steps = int((tf - t0) / h) + 1
-    
-    # Inicializar arrays
-    t = np.linspace(t0, tf, n_steps)
-    x = np.zeros(n_steps)
-    y = np.zeros(n_steps)
-    
-    # Condiciones iniciales
-    x[0] = x0
-    y[0] = y0
-    
-    # Método de Euler
-    for i in range(n_steps - 1):
-        dx_dt, dy_dt = f(t[i], x[i], y[i])
-        
-        x[i + 1] = x[i] + h * dx_dt
-        y[i + 1] = y[i] + h * dy_dt
-    
-    return t, x, y
-
-def interpolacion_polinomial_simple(
-    x: Sequence[float],
-    y: Sequence[float],
-    mostrar_grafico: bool = True
-) -> np.ndarray:
-    """
-    Calcula el polinomio de interpolación que pasa exactamente por los puntos dados (x, y),
-    resolviendo el sistema lineal asociado a la matriz de Vandermonde.
-
-    Parámetros
-    ----------
-    x : Sequence[float]
-        Secuencia con las coordenadas x de los puntos conocidos.
-    y : Sequence[float]
-        Secuencia con las coordenadas y correspondientes a cada x.
-    mostrar_grafico : bool, opcional
-        Si es True (por defecto), muestra el gráfico del polinomio interpolante y los puntos.
 
     Retorna
     -------
-    np.ndarray
-        Arreglo con los coeficientes del polinomio interpolante, ordenados de mayor a menor grado.
-        Es decir, si retorna [a, b, c], el polinomio es: P(x) = a*x^2 + b*x + c
-
-    Ejemplo
-    -------
-    >>> x = [1, 2, 3]
-    >>> y = [2, 3, 5]
-    >>> coef = interpolacion_polinomial_simple(x, y)
-    Coeficientes del polinomio: [ 0.5 -0.5  2. ]
-    Ecuación del polinomio: P(x) = 0.5*x^2 + -0.5*x + 2.0
+    t : ndarray
+        Vector de tiempos
+    y : ndarray
+        Solución aproximada para la posición
+    v : ndarray
+        Solución aproximada para la velocidad
     """
+    
+    n_steps = int((tf - t0) / h) + 1
 
-    # Convertir a arreglos numpy
-    x = np.array(x, dtype=float)
-    y = np.array(y, dtype=float)
+    t = np.linspace(t0, tf, n_steps)
+    y = np.zeros(n_steps)
+    v = np.zeros(n_steps)
 
-    # Verificar que tengan la misma longitud
-    if len(x) != len(y):
-        raise ValueError("Las listas x e y deben tener la misma longitud.")
+    y[0] = y0
+    v[0] = v0
 
-    # Construir la matriz de Vandermonde
-    A = np.vander(x, increasing=False)
+    for i in range(n_steps - 1):
+        dy_dt, dv_dt = f(t[i], y[i], v[i])
+        
+        y[i + 1] = y[i] + h * dy_dt
+        v[i + 1] = v[i] + h * dv_dt
+    
+    return t, y, v
 
-    # Resolver el sistema A * coef = y
-    coef = np.linalg.solve(A, y)
-
-    # Mostrar resultados en consola
-    print("Coeficientes del polinomio:", coef)
-    ecuacion = " + ".join(f"{c:.3g}*x^{len(coef)-i-1}" for i, c in enumerate(coef))
-    print(f"Ecuación del polinomio: P(x) = {ecuacion}")
-
-    # Graficar si se solicita
-    if mostrar_grafico:
-        x_interp = np.linspace(min(x), max(x), 200)
-        y_interp = np.polyval(coef, x_interp)
-        plt.scatter(x, y, color='red', label='Puntos conocidos')
-        plt.plot(x_interp, y_interp, color='blue', label='Polinomio interpolante')
-        plt.title("Interpolación Polinomial Simple")
-        plt.xlabel("x")
-        plt.ylabel("y")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
-
-    return coef
